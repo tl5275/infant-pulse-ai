@@ -9,7 +9,28 @@ import {
   YAxis
 } from "recharts";
 
-export default function BPChart({ data }) {
+function formatTimeTick(value) {
+  if (typeof value !== "number") {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(value);
+}
+
+export default function BPChart({
+  data,
+  chartKey,
+  xKey = "label",
+  xType = "category",
+  xDomain,
+  yDomain = [30, 95]
+}) {
+  const resolvedChartKey = chartKey || `bp-${data?.length || 0}`;
+  const isTimeSeries = xType === "number";
+
   return (
     <section
       data-testid="bp-chart"
@@ -21,11 +42,18 @@ export default function BPChart({ data }) {
       </div>
       <div className="h-[340px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data || []} margin={{ top: 10, right: 12, left: -24, bottom: 10 }}>
+          <LineChart key={resolvedChartKey} data={data || []} margin={{ top: 10, right: 12, left: -24, bottom: 10 }}>
             <CartesianGrid stroke="#d9e6ec" strokeDasharray="4 4" />
-            <XAxis dataKey="label" tick={{ fill: "#5B7384", fontSize: 11 }} />
-            <YAxis tick={{ fill: "#5B7384", fontSize: 11 }} unit="mmHg" domain={[30, 95]} />
+            <XAxis
+              dataKey={xKey}
+              type={xType}
+              domain={isTimeSeries ? (xDomain || ["dataMin", "dataMax"]) : undefined}
+              tick={{ fill: "#5B7384", fontSize: 11 }}
+              tickFormatter={isTimeSeries ? formatTimeTick : undefined}
+            />
+            <YAxis tick={{ fill: "#5B7384", fontSize: 11 }} unit="mmHg" domain={yDomain} />
             <Tooltip
+              labelFormatter={isTimeSeries ? formatTimeTick : undefined}
               contentStyle={{
                 borderRadius: 16,
                 border: "1px solid #dbe7ed",

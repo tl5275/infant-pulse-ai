@@ -10,6 +10,17 @@ import {
   YAxis
 } from "recharts";
 
+function formatTimeTick(value) {
+  if (typeof value !== "number") {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(value);
+}
+
 function VitalChartComponent({
   title,
   color,
@@ -22,8 +33,19 @@ function VitalChartComponent({
   actualStrokeWidth = 3,
   predictedStrokeWidth = 2,
   animationDuration = 450,
-  testId
+  testId,
+  chartKey,
+  xKey = "label",
+  xType = "category",
+  xDomain,
+  yDomain,
+  actualName = "Actual",
+  predictedName = "Predicted",
+  glow = false
 }) {
+  const resolvedChartKey = chartKey || `${title}-${data?.length || 0}`;
+  const isTimeSeries = xType === "number";
+
   return (
     <section
       data-testid={testId}
@@ -35,11 +57,18 @@ function VitalChartComponent({
       </div>
       <div className={chartHeightClassName}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data || []} margin={{ top: 10, right: 12, left: -24, bottom: 10 }}>
+          <LineChart key={resolvedChartKey} data={data || []} margin={{ top: 10, right: 12, left: -24, bottom: 10 }}>
             <CartesianGrid stroke="#d9e6ec" strokeDasharray="4 4" />
-            <XAxis dataKey="label" tick={{ fill: "#5B7384", fontSize: 11 }} />
-            <YAxis tick={{ fill: "#5B7384", fontSize: 11 }} unit={unit} />
+            <XAxis
+              dataKey={xKey}
+              type={xType}
+              domain={isTimeSeries ? (xDomain || ["dataMin", "dataMax"]) : undefined}
+              tick={{ fill: "#5B7384", fontSize: 11 }}
+              tickFormatter={isTimeSeries ? formatTimeTick : undefined}
+            />
+            <YAxis tick={{ fill: "#5B7384", fontSize: 11 }} unit={unit} domain={yDomain} />
             <Tooltip
+              labelFormatter={isTimeSeries ? formatTimeTick : undefined}
               contentStyle={{
                 borderRadius: 16,
                 border: "1px solid #dbe7ed",
@@ -50,11 +79,12 @@ function VitalChartComponent({
             <Line
               type="monotone"
               dataKey={actualKey}
-              name="Actual"
+              name={actualName}
               stroke={color}
               strokeWidth={actualStrokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
+              style={glow ? { filter: `drop-shadow(0 0 8px ${color})` } : undefined}
               dot={false}
               isAnimationActive
               animationDuration={animationDuration}
@@ -63,7 +93,7 @@ function VitalChartComponent({
             <Line
               type="monotone"
               dataKey={predictedKey}
-              name="Predicted"
+              name={predictedName}
               stroke={color}
               strokeWidth={predictedStrokeWidth}
               strokeDasharray="7 6"
