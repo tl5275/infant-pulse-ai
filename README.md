@@ -1,4 +1,4 @@
-# Infant Pulse AI 🚀
+# Infant Pulse AI 
 
 Real-time NICU monitoring system with:
 
@@ -28,5 +28,6 @@ npm run dev
 ## Deployment
 
 - Backend: Render
+- https://infant-pulse-backend.onrender.com/docs
 - Frontend: Render 
 - https://infant-pulse-ai.onrender.com/
