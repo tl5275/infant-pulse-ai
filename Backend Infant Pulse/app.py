@@ -36,6 +36,14 @@ if not any(getattr(route, "path", None) == "/" for route in app.router.routes):
         return {"status": "ok"}
 
 
+@app.get("/debug")
+def debug_root() -> dict[str, str]:
+    return {
+        "source": "ROOT app.py",
+        "file": __file__,
+    }
+
+
 def main() -> None:
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)
 

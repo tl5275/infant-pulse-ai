@@ -98,3 +98,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
+
+
+@app.get("/debug")
+def debug_backend() -> dict[str, str]:
+    return {
+        "source": "backend/main.py",
+        "file": __file__,
+    }
