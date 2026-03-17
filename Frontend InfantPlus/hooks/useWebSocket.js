@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchOverview } from "../services/api";
-import { createNICUSocket } from "../services/socket";
 
 const POLLING_INTERVAL_MS = 2000;
-const RECONNECT_DELAY_MS = 3000;
-const SOCKET_TIMEOUT_MS = 1500;
 
 function selectChannelPayload(snapshot, channel, babyId) {
   if (!snapshot) {
@@ -46,27 +43,16 @@ function createSnapshotSignature(snapshot) {
 }
 
 export function useWebSocket({ channel = "overview", babyId } = {}) {
-  const socketRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
   const pollingTimerRef = useRef(null);
-  const socketTimeoutRef = useRef(null);
   const pulseTimerRef = useRef(null);
   const lastSnapshotSignatureRef = useRef("");
-  const [connectionState, setConnectionState] = useState("connecting");
+  const [connectionState, setConnectionState] = useState("polling");
   const [snapshot, setSnapshot] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [hasFreshUpdate, setHasFreshUpdate] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
-    let shouldReconnect = true;
-
-    function clearSocketTimeout() {
-      if (socketTimeoutRef.current) {
-        window.clearTimeout(socketTimeoutRef.current);
-        socketTimeoutRef.current = null;
-      }
-    }
 
     function applySnapshot(nextSnapshot) {
       if (!isMounted || !nextSnapshot) {
@@ -95,121 +81,35 @@ export function useWebSocket({ channel = "overview", babyId } = {}) {
     async function loadSnapshot() {
       try {
         const overview = await fetchOverview();
+        if (!isMounted) {
+          return;
+        }
+
+        console.log("FETCH OK:", overview);
+        setConnectionState("polling");
         applySnapshot(overview);
       } catch (error) {
-        console.error("Failed to fetch live overview", error);
+        console.error("FETCH ERROR:", error);
+        if (isMounted) {
+          setConnectionState("error");
+        }
       }
     }
 
-    function stopPolling() {
+    loadSnapshot();
+    pollingTimerRef.current = window.setInterval(() => {
+      loadSnapshot();
+    }, POLLING_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
       if (pollingTimerRef.current) {
         window.clearInterval(pollingTimerRef.current);
         pollingTimerRef.current = null;
       }
-    }
-
-    function startPolling() {
-      if (pollingTimerRef.current) {
-        return;
-      }
-
-      setConnectionState("polling");
-      loadSnapshot();
-      pollingTimerRef.current = window.setInterval(() => {
-        loadSnapshot();
-      }, POLLING_INTERVAL_MS);
-    }
-
-    function scheduleReconnect() {
-      if (!shouldReconnect || reconnectTimerRef.current) {
-        return;
-      }
-
-      reconnectTimerRef.current = window.setTimeout(() => {
-        reconnectTimerRef.current = null;
-        connect();
-      }, RECONNECT_DELAY_MS);
-    }
-
-    function connect() {
-      clearSocketTimeout();
-
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
-
-      const socket = createNICUSocket();
-      socketRef.current = socket;
-      setConnectionState("connecting");
-      socketTimeoutRef.current = window.setTimeout(() => {
-        if (socket.readyState !== WebSocket.OPEN) {
-          console.log("WS failed -> fallback to polling");
-          startPolling();
-        }
-      }, SOCKET_TIMEOUT_MS);
-
-      socket.onopen = () => {
-        clearSocketTimeout();
-        stopPolling();
-        setConnectionState("open");
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const nextSnapshot = JSON.parse(event.data);
-          if (nextSnapshot?.event === "connected") {
-            return;
-          }
-
-          applySnapshot(nextSnapshot);
-        } catch (error) {
-          console.error("Failed to parse WebSocket payload", error);
-        }
-      };
-
-      socket.onerror = () => {
-        console.log("WS failed -> fallback to polling");
-        startPolling();
-        socket.close();
-      };
-
-      socket.onclose = () => {
-        clearSocketTimeout();
-        if (socketRef.current === socket) {
-          socketRef.current = null;
-        }
-
-        if (!shouldReconnect) {
-          stopPolling();
-          setConnectionState("closed");
-          return;
-        }
-
-        startPolling();
-        scheduleReconnect();
-      };
-    }
-
-    connect();
-
-    return () => {
-      isMounted = false;
-      shouldReconnect = false;
-      clearSocketTimeout();
-      stopPolling();
-
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
 
       if (pulseTimerRef.current) {
         window.clearTimeout(pulseTimerRef.current);
-      }
-
-      if (socketRef.current) {
-        socketRef.current.close();
       }
     };
   }, []);

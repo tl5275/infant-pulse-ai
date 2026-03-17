@@ -11,7 +11,7 @@ function formatTime(lastUpdatedAt) {
 }
 
 export default function LiveStatusBadge({ connectionState, lastUpdatedAt, hasFreshUpdate = false }) {
-  const isLive = connectionState === "open";
+  const isLive = connectionState === "open" || connectionState === "polling";
   const toneClassName = isLive
     ? "border-[#d5eadf] bg-[#f5fbf7] text-stable"
     : "border-[#f0e1be] bg-[#fffaf0] text-warning";

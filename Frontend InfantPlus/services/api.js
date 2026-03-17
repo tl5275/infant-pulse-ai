@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = "http://localhost:8000";
+const DEFAULT_API_URL = "https://infant-pulse-backend.onrender.com";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/+$/, "");
 
@@ -19,7 +19,9 @@ export function getLiveWebSocketUrl() {
 }
 
 export async function fetchOverview() {
-  const response = await fetch(buildApiUrl("overview"));
+  const response = await fetch(buildApiUrl("overview"), {
+    cache: "no-store"
+  });
   if (!response.ok) {
     throw new Error(`Overview request failed with status ${response.status}`);
   }

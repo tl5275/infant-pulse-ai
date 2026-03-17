@@ -17,7 +17,7 @@ A Next.js + Tailwind CSS hackathon frontend that simulates a production-grade NI
    npm install
 3. Start the dev server:
    npm run dev
-4. Open http://localhost:3000
+4. Open the URL shown by Next.js in your terminal.
 
 ## Routes
 
@@ -27,6 +27,6 @@ A Next.js + Tailwind CSS hackathon frontend that simulates a production-grade NI
 
 ## Notes
 
-- Telemetry updates every second.
-- The websocket layer is mocked in `services/socket.js` so the UI works without a backend.
+- Telemetry polling refreshes the dashboard every 2 seconds.
+- Configure `NEXT_PUBLIC_API_URL` for the environment you are targeting.
 - Periodic anomalies are injected to exercise alert states and risk escalation.

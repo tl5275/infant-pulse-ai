@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const babies = data?.babies || [];
   const alerts = data?.alerts || [];
   const stats = overviewStats(babies);
+  const hasHealthyFeed = connectionState === "open" || connectionState === "polling";
 
   return (
     <>
@@ -77,10 +78,10 @@ export default function DashboardPage() {
 
             <div className="mt-6 flex flex-col gap-4 rounded-[28px] border border-[#dbe7ed] bg-[#fcfeff] p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-4">
-                <div className={`h-3 w-3 rounded-full ${connectionState === "open" ? "bg-stable animate-pulse-soft" : "bg-warning"}`} />
+                <div className={`h-3 w-3 rounded-full ${hasHealthyFeed ? "bg-stable animate-pulse-soft" : "bg-warning"}`} />
                 <div>
-                  <p className="text-sm font-semibold">Telemetry uplink {connectionState === "open" ? "healthy" : "reconnecting"}</p>
-                  <p className="text-xs text-slate">Live refresh every second with auto-reconnect logic.</p>
+                  <p className="text-sm font-semibold">Telemetry uplink {hasHealthyFeed ? "healthy" : "recovering"}</p>
+                  <p className="text-xs text-slate">Live refresh every 2 seconds while polling remains active.</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-3 text-sm">

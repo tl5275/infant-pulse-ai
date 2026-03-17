@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import BPChart from "../../components/BPChart";
 import LiveStatusBadge from "../../components/LiveStatusBadge";
 import PredictionPanel from "../../components/PredictionPanel";
@@ -188,35 +188,10 @@ function normalizePrediction(prediction, vitals) {
   };
 }
 
-function getLatestBpPoint(points) {
-  const actualPoints = extractBpActual(points);
-  return actualPoints[actualPoints.length - 1] || null;
-}
-
-function createSnapshotSignature(baby) {
-  const latestEcg = extractNumericValues(baby.ecgChartData, "ecg")
-    .slice(-6)
-    .map((value) => roundValue(value, 3))
-    .join(",");
-  const latestBp = getLatestBpPoint(baby.bpChartData);
-
-  return [
-    baby.lastUpdated,
-    baby.vitals.heartRate,
-    baby.vitals.spo2,
-    baby.prediction?.predictedHeartRate,
-    baby.prediction?.predictedSpo2,
-    baby.vitals.respiration,
-    baby.vitals.temperature,
-    latestBp?.systolic ?? "na",
-    latestBp?.diastolic ?? "na",
-    latestEcg
-  ].join("|");
-}
-
 function handleIncomingData(nextBaby, timestamp = Date.now()) {
   const vitals = normalizeVitals(nextBaby.vitals);
   const prediction = normalizePrediction(nextBaby.prediction, vitals);
+  console.log("DATA RECEIVED:", new Date().toISOString());
 
   return {
     logPayload: {
@@ -271,10 +246,8 @@ export default function BabyDetailPage() {
   const [hrData, setHrData] = useState([]);
   const [spo2Data, setSpo2Data] = useState([]);
   const [bpData, setBpData] = useState([]);
-  const lastSnapshotSignatureRef = useRef(null);
 
   useEffect(() => {
-    lastSnapshotSignatureRef.current = null;
     setLiveBaby(null);
     setEcgData([]);
     setHrData([]);
@@ -287,13 +260,6 @@ export default function BabyDetailPage() {
       return;
     }
 
-    const snapshotSignature = createSnapshotSignature(baby);
-
-    if (lastSnapshotSignatureRef.current === snapshotSignature) {
-      return;
-    }
-
-    lastSnapshotSignatureRef.current = snapshotSignature;
     const nextState = handleIncomingData(baby);
     console.log("DATA FLOW:", nextState.logPayload);
     setLiveBaby(nextState.baby);
