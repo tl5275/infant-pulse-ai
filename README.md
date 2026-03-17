@@ -28,4 +28,5 @@ npm run dev
 ## Deployment
 
 - Backend: Render
-- Frontend: Render / Vercel
+- Frontend: Render 
+- https://infant-pulse-ai.onrender.com/
