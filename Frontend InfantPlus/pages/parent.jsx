@@ -1,5 +1,6 @@
 import Head from "next/head";
 import Link from "next/link";
+import LiveStatusBadge from "../components/LiveStatusBadge";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -35,7 +36,7 @@ function ParentMessage({ baby }) {
 export default function ParentPage() {
   const router = useRouter();
   const routeSelectedId = typeof router.query.id === "string" ? router.query.id : null;
-  const { data, connectionState } = useWebSocket({ channel: "overview" });
+  const { data, connectionState, lastUpdatedAt, hasFreshUpdate } = useWebSocket({ channel: "overview" });
   const babies = data?.babies || [];
   const [selectedBabyId, setSelectedBabyId] = useState(routeSelectedId);
 
@@ -80,7 +81,7 @@ export default function ParentPage() {
   return (
     <>
       <Head>
-        <title>Parent View | InfantPlus</title>
+        <title>Parent View | Infant Pulse</title>
       </Head>
       <main className="min-h-screen bg-surface px-4 py-8 text-ink md:px-8">
         <div className="mx-auto max-w-5xl space-y-6">
@@ -94,9 +95,14 @@ export default function ParentPage() {
               <p className="text-xs text-slate">
                 Live feed status: <span className="font-semibold capitalize text-ink">{connectionState}</span>
               </p>
+              <LiveStatusBadge
+                connectionState={connectionState}
+                lastUpdatedAt={lastUpdatedAt}
+                hasFreshUpdate={hasFreshUpdate}
+              />
             </div>
             <Link href="/" className="rounded-full border border-[#d4e1e8] px-4 py-2 text-sm text-slate transition hover:border-accent hover:text-accent">
-              ← Back to Dashboard
+              Back to Dashboard
             </Link>
           </div>
 
@@ -151,4 +157,10 @@ export default function ParentPage() {
       </main>
     </>
   );
+}
+
+export async function getServerSideProps() {
+  return {
+    props: {}
+  };
 }

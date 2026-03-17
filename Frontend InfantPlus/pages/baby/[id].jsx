@@ -2,6 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import BPChart from "../../components/BPChart";
+import LiveStatusBadge from "../../components/LiveStatusBadge";
 import PredictionPanel from "../../components/PredictionPanel";
 import RiskIndicator from "../../components/RiskIndicator";
 import VitalChart from "../../components/VitalChart";
@@ -26,7 +27,7 @@ function DashboardBackIcon() {
 export default function BabyDetailPage() {
   const router = useRouter();
   const babyId = typeof router.query.id === "string" ? router.query.id : undefined;
-  const { data, connectionState } = useWebSocket({ channel: "baby", babyId });
+  const { data, connectionState, lastUpdatedAt, hasFreshUpdate } = useWebSocket({ channel: "baby", babyId });
   const baby = data?.baby;
 
   if (!baby) {
@@ -42,7 +43,7 @@ export default function BabyDetailPage() {
   return (
     <>
       <Head>
-        <title>{baby.id} | InfantPlus Monitor</title>
+        <title>{baby.id} | Infant Pulse Monitor</title>
       </Head>
       <main className="min-h-screen bg-surface px-4 py-6 text-ink md:px-8">
         <div className="mx-auto max-w-7xl space-y-6">
@@ -68,6 +69,11 @@ export default function BabyDetailPage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                <LiveStatusBadge
+                  connectionState={connectionState}
+                  lastUpdatedAt={lastUpdatedAt}
+                  hasFreshUpdate={hasFreshUpdate}
+                />
                 <RiskIndicator score={baby.riskScore} label="Risk Score" />
                 <div className="rounded-full border border-[#d4e1e8] bg-white px-4 py-2 text-sm text-slate">
                   Link: {connectionState}
@@ -143,4 +149,10 @@ export default function BabyDetailPage() {
       </main>
     </>
   );
+}
+
+export async function getServerSideProps() {
+  return {
+    props: {}
+  };
 }

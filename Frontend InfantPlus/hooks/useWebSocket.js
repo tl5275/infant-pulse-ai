@@ -27,19 +27,43 @@ function selectChannelPayload(snapshot, channel, babyId) {
 export function useWebSocket({ channel = "overview", babyId } = {}) {
   const socketRef = useRef(null);
   const reconnectTimerRef = useRef(null);
+  const pollingTimerRef = useRef(null);
+  const pulseTimerRef = useRef(null);
   const [connectionState, setConnectionState] = useState("connecting");
   const [snapshot, setSnapshot] = useState(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [hasFreshUpdate, setHasFreshUpdate] = useState(false);
 
   useEffect(() => {
     let shouldReconnect = true;
 
-    async function loadInitialSnapshot() {
+    function applySnapshot(nextSnapshot) {
+      setSnapshot(nextSnapshot);
+      setLastUpdatedAt(new Date());
+      setHasFreshUpdate(true);
+
+      if (pulseTimerRef.current) {
+        window.clearTimeout(pulseTimerRef.current);
+      }
+
+      pulseTimerRef.current = window.setTimeout(() => {
+        setHasFreshUpdate(false);
+      }, 900);
+    }
+
+    async function loadSnapshot() {
       try {
         const overview = await fetchOverview();
-        setSnapshot(overview);
+        applySnapshot(overview);
       } catch (error) {
-        console.error("Failed to fetch initial overview", error);
+        console.error("Failed to fetch live overview", error);
       }
+    }
+
+    function startPolling() {
+      pollingTimerRef.current = window.setInterval(() => {
+        loadSnapshot();
+      }, 2000);
     }
 
     function connect() {
@@ -53,7 +77,7 @@ export function useWebSocket({ channel = "overview", babyId } = {}) {
 
       socket.onmessage = (event) => {
         try {
-          setSnapshot(JSON.parse(event.data));
+          applySnapshot(JSON.parse(event.data));
         } catch (error) {
           console.error("Failed to parse WebSocket payload", error);
         }
@@ -76,7 +100,8 @@ export function useWebSocket({ channel = "overview", babyId } = {}) {
       };
     }
 
-    loadInitialSnapshot();
+    loadSnapshot();
+    startPolling();
     connect();
 
     return () => {
@@ -86,6 +111,14 @@ export function useWebSocket({ channel = "overview", babyId } = {}) {
         window.clearTimeout(reconnectTimerRef.current);
       }
 
+      if (pollingTimerRef.current) {
+        window.clearInterval(pollingTimerRef.current);
+      }
+
+      if (pulseTimerRef.current) {
+        window.clearTimeout(pulseTimerRef.current);
+      }
+
       if (socketRef.current) {
         socketRef.current.close();
       }
@@ -93,5 +126,5 @@ export function useWebSocket({ channel = "overview", babyId } = {}) {
   }, []);
 
   const data = selectChannelPayload(snapshot, channel, babyId);
-  return { data, connectionState };
+  return { data, connectionState, lastUpdatedAt, hasFreshUpdate };
 }

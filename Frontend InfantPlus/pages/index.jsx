@@ -2,6 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import AlertPopup from "../components/AlertPopup";
 import BabyCard from "../components/BabyCard";
+import LiveStatusBadge from "../components/LiveStatusBadge";
 import NICURoomMap from "../components/NICURoomMap";
 import RiskIndicator from "../components/RiskIndicator";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -18,7 +19,7 @@ const overviewStats = (babies) => {
 };
 
 export default function DashboardPage() {
-  const { data, connectionState } = useWebSocket({ channel: "overview" });
+  const { data, connectionState, lastUpdatedAt, hasFreshUpdate } = useWebSocket({ channel: "overview" });
   const babies = data?.babies || [];
   const alerts = data?.alerts || [];
   const stats = overviewStats(babies);
@@ -83,6 +84,11 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-3 text-sm">
+                <LiveStatusBadge
+                  connectionState={connectionState}
+                  lastUpdatedAt={lastUpdatedAt}
+                  hasFreshUpdate={hasFreshUpdate}
+                />
                 <Link href="/parent" className="rounded-full border border-[#d4e1e8] px-4 py-2 text-slate transition hover:border-accent hover:text-accent">
                   Parent View
                 </Link>
@@ -116,4 +122,10 @@ export default function DashboardPage() {
       </main>
     </>
   );
+}
+
+export async function getServerSideProps() {
+  return {
+    props: {}
+  };
 }
