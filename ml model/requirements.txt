@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+numpy
+scikit-learn
+torch
+matplotlib
+websocket-client
+joblib
