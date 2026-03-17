@@ -114,3 +114,48 @@ def test_analyze_returns_bp_series(tmp_path: Path) -> None:
             systolic > diastolic
             for systolic, diastolic in zip(body["bp"]["systolic"], body["bp"]["diastolic"])
         )
+
+
+def test_overview_changes_on_every_request(tmp_path: Path) -> None:
+    with build_test_client(tmp_path) as client:
+        first = client.get("/overview")
+        second = client.get("/overview")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+
+        first_body = first.json()
+        second_body = second.json()
+        assert first_body["generated_at"] != second_body["generated_at"]
+
+        first_baby = first_body["babies"][0]
+        second_baby = second_body["babies"][0]
+        assert first_baby["vitals"] != second_baby["vitals"]
+        assert first_baby["ecgChartData"] != second_baby["ecgChartData"]
+
+
+def test_baby_endpoint_changes_every_request(tmp_path: Path) -> None:
+    with build_test_client(tmp_path) as client:
+        baby = client.get("/babies").json()[0]
+
+        first = client.get(f"/baby/{baby['nicu_bed']}")
+        second = client.get(f"/baby/{baby['nicu_bed']}")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+
+        first_body = first.json()
+        second_body = second.json()
+        assert first_body["timestamp"] != second_body["timestamp"]
+        assert first_body["ecg"] != second_body["ecg"]
+        assert (
+            first_body["heart_rate"],
+            first_body["spo2"],
+            first_body["temperature"],
+            first_body["bp"],
+        ) != (
+            second_body["heart_rate"],
+            second_body["spo2"],
+            second_body["temperature"],
+            second_body["bp"],
+        )

@@ -29,7 +29,17 @@ async def ingest_vitals(
     if baby is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Baby not found")
 
+    settings = request.app.state.settings
+    monitoring_service = request.app.state.monitoring_service
     ingestion_service = request.app.state.ingestion_service
+
+    if not settings.enable_background_worker:
+        await monitoring_service.process_vital_payload(payload)
+        return QueueResponse(
+            status="processed",
+            message="Vital sample processed immediately",
+            queued_at=datetime.now(timezone.utc),
+        )
 
     try:
         await ingestion_service.enqueue(payload)
@@ -62,4 +72,3 @@ async def get_recent_baby_vitals(
 
     vitals = await list_recent_vitals(db, baby_id=baby_id, limit=limit)
     return [VitalRead.model_validate(vital) for vital in vitals]
-

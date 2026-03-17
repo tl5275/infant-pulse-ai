@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     recent_vitals_limit: int = 100
     initial_baby_count: int = Field(default=5, ge=1, le=10)
     enable_db_seed: bool = True
-    enable_background_worker: bool = True
+    enable_background_worker: bool = False
     cors_origins: list[str] = ["*"]
     simulator_api_url: str = "http://127.0.0.1:8000"
     simulator_interval_seconds: float = 1.0
