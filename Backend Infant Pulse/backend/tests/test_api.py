@@ -131,7 +131,9 @@ def test_overview_changes_on_every_request(tmp_path: Path) -> None:
         first_baby = first_body["babies"][0]
         second_baby = second_body["babies"][0]
         assert first_baby["vitals"] != second_baby["vitals"]
+        assert first_baby["chartData"] != second_baby["chartData"]
         assert first_baby["ecgChartData"] != second_baby["ecgChartData"]
+        assert first_baby["bpChartData"] != second_baby["bpChartData"]
 
 
 def test_baby_endpoint_changes_every_request(tmp_path: Path) -> None:
@@ -147,15 +149,7 @@ def test_baby_endpoint_changes_every_request(tmp_path: Path) -> None:
         first_body = first.json()
         second_body = second.json()
         assert first_body["timestamp"] != second_body["timestamp"]
-        assert first_body["ecg"] != second_body["ecg"]
-        assert (
-            first_body["heart_rate"],
-            first_body["spo2"],
-            first_body["temperature"],
-            first_body["bp"],
-        ) != (
-            second_body["heart_rate"],
-            second_body["spo2"],
-            second_body["temperature"],
-            second_body["bp"],
-        )
+        assert first_body["vitals"] != second_body["vitals"]
+        assert first_body["chartData"] != second_body["chartData"]
+        assert first_body["ecgChartData"] != second_body["ecgChartData"]
+        assert first_body["bpChartData"] != second_body["bpChartData"]

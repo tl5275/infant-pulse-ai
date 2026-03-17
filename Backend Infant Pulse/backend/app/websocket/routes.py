@@ -27,9 +27,9 @@ async def vitals_websocket(websocket: WebSocket) -> None:
 @router.websocket("/ws/live")
 async def live_websocket(websocket: WebSocket) -> None:
     manager = websocket.app.state.live_websocket_manager
-    live_monitor = websocket.app.state.live_monitor
+    request_telemetry_service = websocket.app.state.request_telemetry_service
     await manager.connect(websocket)
-    await websocket.send_json(jsonable_encoder(live_monitor.get_overview()))
+    await websocket.send_json(jsonable_encoder(request_telemetry_service.generate_overview()))
 
     try:
         while True:

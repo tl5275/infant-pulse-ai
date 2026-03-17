@@ -54,7 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             recent_vitals_limit=app_settings.recent_vitals_limit,
         )
         await monitoring_service.bootstrap()
-        request_telemetry_service = RequestTelemetryService(live_monitor=live_monitor)
+        request_telemetry_service = RequestTelemetryService(alert_source=live_monitor)
         request_telemetry_service.seed_babies(babies)
 
         ingestion_service = IngestionService(

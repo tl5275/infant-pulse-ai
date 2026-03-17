@@ -20,7 +20,7 @@ async def get_babies(db: DBSession) -> list[BabyRead]:
 @router.get("/baby/{baby_id}", summary="Get a fresh bedside payload for one baby")
 async def get_baby_live_snapshot(baby_id: str, request: Request) -> dict[str, Any]:
     request_telemetry_service = request.app.state.request_telemetry_service
-    payload = request_telemetry_service.get_baby_payload(baby_id)
+    payload = request_telemetry_service.generate_baby_payload(baby_id)
     if payload is None:
         raise HTTPException(status_code=404, detail="Baby not found")
     return payload
