@@ -70,7 +70,7 @@ export default function BPChart({
               strokeLinecap="round"
               strokeLinejoin="round"
               dot={false}
-              isAnimationActive
+              isAnimationActive={false}
               animationDuration={500}
               animationEasing="ease-in-out"
             />
@@ -84,7 +84,7 @@ export default function BPChart({
               strokeLinecap="round"
               strokeLinejoin="round"
               dot={false}
-              isAnimationActive
+              isAnimationActive={false}
               animationDuration={500}
               animationEasing="ease-in-out"
             />
@@ -97,7 +97,7 @@ export default function BPChart({
               strokeLinecap="round"
               strokeLinejoin="round"
               dot={false}
-              isAnimationActive
+              isAnimationActive={false}
               animationDuration={500}
               animationEasing="ease-in-out"
             />
@@ -111,7 +111,7 @@ export default function BPChart({
               strokeLinecap="round"
               strokeLinejoin="round"
               dot={false}
-              isAnimationActive
+              isAnimationActive={false}
               animationDuration={500}
               animationEasing="ease-in-out"
             />

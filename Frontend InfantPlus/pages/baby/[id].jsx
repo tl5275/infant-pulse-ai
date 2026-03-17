@@ -9,9 +9,10 @@ import RiskIndicator from "../../components/RiskIndicator";
 import VitalChart from "../../components/VitalChart";
 import { useWebSocket } from "../../hooks/useWebSocket";
 
-const MAX_POINTS = 60;
+const MAX_VITAL_POINTS = 60;
+const MAX_ECG_POINTS = 96;
 const VITAL_POINT_INTERVAL_MS = 1000;
-const ECG_POINT_INTERVAL_MS = 140;
+const ECG_POINT_INTERVAL_MS = 50;
 
 const metricCards = (baby) => [
   { label: "Heart Rate", value: `${baby.vitals.heartRate} bpm` },
@@ -20,8 +21,8 @@ const metricCards = (baby) => [
   { label: "Temperature", value: `${baby.vitals.temperature.toFixed(1)} C` }
 ];
 
-function clampSeries(points, maxPoints = MAX_POINTS) {
-  return points.slice(-maxPoints);
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function roundValue(value, digits = 1) {
@@ -29,7 +30,8 @@ function roundValue(value, digits = 1) {
 }
 
 function getNumericValue(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  const nextValue = Number(value);
+  return Number.isFinite(nextValue) ? nextValue : null;
 }
 
 function extractNumericValues(points, key) {
@@ -59,8 +61,8 @@ function extractBpForecast(points) {
     }));
 }
 
-function buildSeedSeries(values, spacingMs, endAt = Date.now()) {
-  const slice = values.slice(-MAX_POINTS);
+function buildTimestampSeries(values, spacingMs, endAt, limit) {
+  const slice = values.slice(-limit);
   if (!slice.length) {
     return [];
   }
@@ -72,27 +74,25 @@ function buildSeedSeries(values, spacingMs, endAt = Date.now()) {
   }));
 }
 
-function buildSeedBpSeries(values, spacingMs, endAt = Date.now()) {
-  const slice = values.slice(-MAX_POINTS);
-  if (!slice.length) {
-    return [];
-  }
-
-  const startAt = endAt - (slice.length - 1) * spacingMs;
-  return slice.map((point, index) => ({
-    x: startAt + index * spacingMs,
-    systolic: Number(point.systolic),
-    diastolic: Number(point.diastolic)
-  }));
-}
-
-function buildLineChartData(actualPoints, predictedValues, actualKey, predictedKey, spacingMs, digits = 1) {
-  const actualSeries = actualPoints.map((point) => ({
+function mapActualForecastSeries({
+  points,
+  actualKey,
+  predictedKey,
+  spacingMs,
+  endAt,
+  limit = MAX_VITAL_POINTS,
+  clampRange,
+  digits = 1
+}) {
+  const [minValue, maxValue] = clampRange;
+  const actualValues = extractNumericValues(points, actualKey).map((value) => clamp(value, minValue, maxValue));
+  const predictedValues = extractNumericValues(points, predictedKey).map((value) => clamp(value, minValue, maxValue));
+  const actualSeries = buildTimestampSeries(actualValues, spacingMs, endAt, limit).map((point) => ({
     x: point.x,
     [actualKey]: roundValue(point.y, digits),
     [predictedKey]: null
   }));
-  const baseTime = actualPoints[actualPoints.length - 1]?.x || Date.now();
+  const baseTime = actualSeries[actualSeries.length - 1]?.x || endAt;
   const forecastSeries = predictedValues.map((value, index) => ({
     x: baseTime + (index + 1) * spacingMs,
     [actualKey]: null,
@@ -102,34 +102,90 @@ function buildLineChartData(actualPoints, predictedValues, actualKey, predictedK
   return [...actualSeries, ...forecastSeries];
 }
 
-function buildBpChartData(actualPoints, predictedPoints, spacingMs, digits = 1) {
-  const actualSeries = actualPoints.map((point) => ({
-    x: point.x,
-    systolic: roundValue(point.systolic, digits),
+function buildBpChartData(points, endAt) {
+  const actualValues = extractBpActual(points)
+    .slice(-MAX_VITAL_POINTS)
+    .map((point) => ({
+      systolic: clamp(point.systolic, 50, 100),
+      diastolic: clamp(point.diastolic, 25, 70)
+    }));
+  const predictedValues = extractBpForecast(points).map((point) => ({
+    systolic: clamp(point.systolic, 50, 100),
+    diastolic: clamp(point.diastolic, 25, 70)
+  }));
+
+  const actualSeries = actualValues.map((point, index) => ({
+    x: endAt - (actualValues.length - 1 - index) * VITAL_POINT_INTERVAL_MS,
+    systolic: roundValue(point.systolic, 1),
     predictedSystolic: null,
-    diastolic: roundValue(point.diastolic, digits),
+    diastolic: roundValue(point.diastolic, 1),
     predictedDiastolic: null
   }));
-  const baseTime = actualPoints[actualPoints.length - 1]?.x || Date.now();
-  const forecastSeries = predictedPoints.map((point, index) => ({
-    x: baseTime + (index + 1) * spacingMs,
+  const baseTime = actualSeries[actualSeries.length - 1]?.x || endAt;
+  const forecastSeries = predictedValues.map((point, index) => ({
+    x: baseTime + (index + 1) * VITAL_POINT_INTERVAL_MS,
     systolic: null,
-    predictedSystolic: roundValue(point.systolic, digits),
+    predictedSystolic: roundValue(point.systolic, 1),
     diastolic: null,
-    predictedDiastolic: roundValue(point.diastolic, digits)
+    predictedDiastolic: roundValue(point.diastolic, 1)
   }));
 
   return [...actualSeries, ...forecastSeries];
 }
 
-function generateECG(timestamp) {
-  const waveform =
-    Math.sin(timestamp / 110) +
-    0.45 * Math.sin(timestamp / 24) +
-    0.18 * Math.sin(timestamp / 8) +
-    Math.random() * 0.08;
+function buildFallbackEcgValues(endAt, count = MAX_ECG_POINTS) {
+  const startAt = endAt - (count - 1) * ECG_POINT_INTERVAL_MS;
 
-  return roundValue(waveform, 4);
+  return Array.from({ length: count }, (_, index) => {
+    const x = startAt + index * ECG_POINT_INTERVAL_MS;
+    const phase = x / 100;
+    return roundValue(
+      clamp(Math.sin(phase) + 0.35 * Math.sin(phase * 2.6) + 0.08 * Math.sin(phase * 8), -2.5, 2.5),
+      4
+    );
+  });
+}
+
+function buildEcgChartData(points, endAt) {
+  const actualValues = extractNumericValues(points, "ecg")
+    .slice(-MAX_ECG_POINTS)
+    .map((value) => clamp(value, -2.5, 2.5));
+  const predictedValues = extractNumericValues(points, "predictedEcg").map((value) => clamp(value, -2.5, 2.5));
+  const sourceValues = actualValues.length ? actualValues : buildFallbackEcgValues(endAt);
+  const actualSeries = buildTimestampSeries(sourceValues, ECG_POINT_INTERVAL_MS, endAt, MAX_ECG_POINTS).map((point) => ({
+    x: point.x,
+    ecg: roundValue(point.y, 4),
+    predictedEcg: null
+  }));
+  const baseTime = actualSeries[actualSeries.length - 1]?.x || endAt;
+  const forecastSeries = predictedValues.map((value, index) => ({
+    x: baseTime + (index + 1) * ECG_POINT_INTERVAL_MS,
+    ecg: null,
+    predictedEcg: roundValue(value, 4)
+  }));
+
+  return [...actualSeries, ...forecastSeries];
+}
+
+function normalizeVitals(vitals) {
+  return {
+    heartRate: clamp(getNumericValue(vitals?.heartRate) ?? 0, 80, 200),
+    spo2: clamp(getNumericValue(vitals?.spo2) ?? 0, 80, 100),
+    respiration: clamp(getNumericValue(vitals?.respiration) ?? 0, 20, 90),
+    temperature: clamp(getNumericValue(vitals?.temperature) ?? 0, 35, 38)
+  };
+}
+
+function normalizePrediction(prediction, vitals) {
+  if (!prediction) {
+    return null;
+  }
+
+  return {
+    ...prediction,
+    predictedHeartRate: clamp(getNumericValue(prediction.predictedHeartRate) ?? vitals.heartRate, 80, 200),
+    predictedSpo2: clamp(getNumericValue(prediction.predictedSpo2) ?? vitals.spo2, 80, 100)
+  };
 }
 
 function getLatestBpPoint(points) {
@@ -138,17 +194,62 @@ function getLatestBpPoint(points) {
 }
 
 function createSnapshotSignature(baby) {
+  const latestEcg = extractNumericValues(baby.ecgChartData, "ecg")
+    .slice(-6)
+    .map((value) => roundValue(value, 3))
+    .join(",");
   const latestBp = getLatestBpPoint(baby.bpChartData);
 
   return [
     baby.lastUpdated,
     baby.vitals.heartRate,
     baby.vitals.spo2,
+    baby.prediction?.predictedHeartRate,
+    baby.prediction?.predictedSpo2,
     baby.vitals.respiration,
     baby.vitals.temperature,
     latestBp?.systolic ?? "na",
-    latestBp?.diastolic ?? "na"
+    latestBp?.diastolic ?? "na",
+    latestEcg
   ].join("|");
+}
+
+function handleIncomingData(nextBaby, timestamp = Date.now()) {
+  const vitals = normalizeVitals(nextBaby.vitals);
+  const prediction = normalizePrediction(nextBaby.prediction, vitals);
+
+  return {
+    logPayload: {
+      babyId: nextBaby.id,
+      sourceUpdatedAt: nextBaby.lastUpdated,
+      heartRate: vitals.heartRate,
+      spo2: vitals.spo2,
+      temperature: vitals.temperature
+    },
+    baby: {
+      ...nextBaby,
+      vitals,
+      prediction: prediction || nextBaby.prediction
+    },
+    hrData: mapActualForecastSeries({
+      points: nextBaby.chartData,
+      actualKey: "heartRate",
+      predictedKey: "predictedHeartRate",
+      spacingMs: VITAL_POINT_INTERVAL_MS,
+      endAt: timestamp,
+      clampRange: [80, 200]
+    }),
+    spo2Data: mapActualForecastSeries({
+      points: nextBaby.chartData,
+      actualKey: "spo2",
+      predictedKey: "predictedSpo2",
+      spacingMs: VITAL_POINT_INTERVAL_MS,
+      endAt: timestamp,
+      clampRange: [80, 100]
+    }),
+    bpData: buildBpChartData(nextBaby.bpChartData, timestamp),
+    ecgData: buildEcgChartData(nextBaby.ecgChartData, timestamp)
+  };
 }
 
 function DashboardBackIcon() {
@@ -165,32 +266,20 @@ export default function BabyDetailPage() {
   const babyId = typeof router.query.id === "string" ? router.query.id : undefined;
   const { data, connectionState, lastUpdatedAt, hasFreshUpdate } = useWebSocket({ channel: "baby", babyId });
   const baby = data?.baby;
+  const [liveBaby, setLiveBaby] = useState(null);
   const [ecgData, setEcgData] = useState([]);
   const [hrData, setHrData] = useState([]);
   const [spo2Data, setSpo2Data] = useState([]);
   const [bpData, setBpData] = useState([]);
-  const [ecgForecast, setEcgForecast] = useState([]);
-  const [hrForecast, setHrForecast] = useState([]);
-  const [spo2Forecast, setSpo2Forecast] = useState([]);
-  const [bpForecast, setBpForecast] = useState([]);
-  const seededBabyIdRef = useRef(null);
   const lastSnapshotSignatureRef = useRef(null);
-  const ecgSamplesRef = useRef([]);
-  const ecgCursorRef = useRef(0);
 
   useEffect(() => {
-    seededBabyIdRef.current = null;
     lastSnapshotSignatureRef.current = null;
-    ecgSamplesRef.current = [];
-    ecgCursorRef.current = 0;
+    setLiveBaby(null);
     setEcgData([]);
     setHrData([]);
     setSpo2Data([]);
     setBpData([]);
-    setEcgForecast([]);
-    setHrForecast([]);
-    setSpo2Forecast([]);
-    setBpForecast([]);
   }, [babyId]);
 
   useEffect(() => {
@@ -198,117 +287,24 @@ export default function BabyDetailPage() {
       return;
     }
 
-    const timestamp = Date.now();
-    const heartRateHistory = extractNumericValues(baby.chartData, "heartRate");
-    const spo2History = extractNumericValues(baby.chartData, "spo2");
-    const ecgHistory = extractNumericValues(baby.ecgChartData, "ecg");
-    const bloodPressureHistory = extractBpActual(baby.bpChartData);
-    const nextHrForecast = extractNumericValues(baby.chartData, "predictedHeartRate");
-    const nextSpo2Forecast = extractNumericValues(baby.chartData, "predictedSpo2");
-    const nextEcgForecast = extractNumericValues(baby.ecgChartData, "predictedEcg");
-    const nextBpForecast = extractBpForecast(baby.bpChartData);
     const snapshotSignature = createSnapshotSignature(baby);
-    const currentBpPoint = bloodPressureHistory[bloodPressureHistory.length - 1] || null;
-
-    setHrForecast(nextHrForecast);
-    setSpo2Forecast(nextSpo2Forecast);
-    setEcgForecast(nextEcgForecast);
-    setBpForecast(nextBpForecast);
-
-    if (ecgHistory.length) {
-      ecgSamplesRef.current = ecgHistory;
-    }
-
-    if (seededBabyIdRef.current !== baby.id) {
-      seededBabyIdRef.current = baby.id;
-      lastSnapshotSignatureRef.current = snapshotSignature;
-      ecgCursorRef.current = 0;
-      setHrData(buildSeedSeries(heartRateHistory.length ? heartRateHistory : [baby.vitals.heartRate], VITAL_POINT_INTERVAL_MS, timestamp));
-      setSpo2Data(buildSeedSeries(spo2History.length ? spo2History : [baby.vitals.spo2], VITAL_POINT_INTERVAL_MS, timestamp));
-      setBpData(buildSeedBpSeries(bloodPressureHistory, VITAL_POINT_INTERVAL_MS, timestamp));
-      setEcgData(
-        buildSeedSeries(
-          ecgHistory.length ? ecgHistory : [generateECG(timestamp - ECG_POINT_INTERVAL_MS), generateECG(timestamp)],
-          ECG_POINT_INTERVAL_MS,
-          timestamp
-        )
-      );
-      return;
-    }
 
     if (lastSnapshotSignatureRef.current === snapshotSignature) {
       return;
     }
 
     lastSnapshotSignatureRef.current = snapshotSignature;
-    setHrData((previous) => clampSeries([...previous, { x: timestamp, y: baby.vitals.heartRate }]));
-    setSpo2Data((previous) => clampSeries([...previous, { x: timestamp, y: baby.vitals.spo2 }]));
-
-    if (currentBpPoint) {
-      setBpData((previous) =>
-        clampSeries([
-          ...previous,
-          {
-            x: timestamp,
-            systolic: currentBpPoint.systolic,
-            diastolic: currentBpPoint.diastolic
-          }
-        ])
-      );
-    }
+    const nextState = handleIncomingData(baby);
+    console.log("DATA FLOW:", nextState.logPayload);
+    setLiveBaby(nextState.baby);
+    setHrData(nextState.hrData);
+    setSpo2Data(nextState.spo2Data);
+    setBpData(nextState.bpData);
+    setEcgData(nextState.ecgData);
   }, [baby]);
+  const currentBaby = liveBaby || baby;
 
-  useEffect(() => {
-    if (!babyId) {
-      return undefined;
-    }
-
-    const intervalId = window.setInterval(() => {
-      const timestamp = Date.now();
-      const samples = ecgSamplesRef.current;
-      const nextValue =
-        samples.length > 0
-          ? Number(samples[ecgCursorRef.current++ % samples.length])
-          : generateECG(timestamp);
-
-      setEcgData((previous) =>
-        clampSeries([
-          ...previous,
-          {
-            x: timestamp,
-            y: nextValue
-          }
-        ])
-      );
-    }, ECG_POINT_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [babyId]);
-
-  useEffect(() => {
-    console.log("ECG length:", ecgData.length);
-  }, [ecgData.length]);
-
-  const ecgChartData = buildLineChartData(ecgData, ecgForecast, "ecg", "predictedEcg", ECG_POINT_INTERVAL_MS, 4);
-  const heartRateChartData = buildLineChartData(
-    hrData,
-    hrForecast,
-    "heartRate",
-    "predictedHeartRate",
-    VITAL_POINT_INTERVAL_MS
-  );
-  const spo2ChartData = buildLineChartData(
-    spo2Data,
-    spo2Forecast,
-    "spo2",
-    "predictedSpo2",
-    VITAL_POINT_INTERVAL_MS
-  );
-  const bloodPressureChartData = buildBpChartData(bpData, bpForecast, VITAL_POINT_INTERVAL_MS);
-
-  if (!baby) {
+  if (!currentBaby) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-surface px-4 text-ink">
         <div className="rounded-3xl border border-[#dbe7ed] bg-white p-8 shadow-panel">
@@ -321,7 +317,7 @@ export default function BabyDetailPage() {
   return (
     <>
       <Head>
-        <title>{baby.id} | Infant Pulse Monitor</title>
+        <title>{currentBaby.id} | Infant Pulse Monitor</title>
       </Head>
       <main className="min-h-screen bg-surface px-4 py-6 text-ink md:px-8">
         <div className="mx-auto max-w-7xl space-y-6">
@@ -340,9 +336,9 @@ export default function BabyDetailPage() {
                   <span>Dashboard</span>
                 </Link>
                 <div>
-                  <h1 className="text-3xl font-semibold">{baby.id} Bedside Monitor</h1>
+                  <h1 className="text-3xl font-semibold">{currentBaby.id} Bedside Monitor</h1>
                   <p className="mt-1 text-sm text-slate">
-                    {baby.name} - Bed {baby.bed} - {baby.ageLabel} - Gestation {baby.gestation}
+                    {currentBaby.name} - Bed {currentBaby.bed} - {currentBaby.ageLabel} - Gestation {currentBaby.gestation}
                   </p>
                 </div>
               </div>
@@ -352,7 +348,7 @@ export default function BabyDetailPage() {
                   lastUpdatedAt={lastUpdatedAt}
                   hasFreshUpdate={hasFreshUpdate}
                 />
-                <RiskIndicator score={baby.riskScore} label="Risk Score" />
+                <RiskIndicator score={currentBaby.riskScore} label="Risk Score" />
                 <div className="rounded-full border border-[#d4e1e8] bg-white px-4 py-2 text-sm text-slate">
                   Link: {connectionState}
                 </div>
@@ -361,7 +357,7 @@ export default function BabyDetailPage() {
           </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {metricCards(baby).map((metric) => (
+            {metricCards(currentBaby).map((metric) => (
               <div key={metric.label} className="rounded-[26px] border border-[#dbe7ed] bg-white p-5 shadow-panel">
                 <p className="text-xs uppercase tracking-[0.25em] text-slate">{metric.label}</p>
                 <p className="mt-3 text-3xl font-semibold">{metric.value}</p>
@@ -378,12 +374,11 @@ export default function BabyDetailPage() {
                 unit=""
                 actualKey="ecg"
                 predictedKey="predictedEcg"
-                data={ecgChartData}
+                data={ecgData}
                 chartHeightClassName="h-[390px] md:h-[420px]"
                 actualStrokeWidth={4}
                 predictedStrokeWidth={2.5}
-                animationDuration={700}
-                chartKey={`ecg-${ecgData[ecgData.length - 1]?.x || 0}`}
+                chartKey={`ecg-${ecgData.length}-${ecgData[ecgData.length - 1]?.x || 0}`}
                 xKey="x"
                 xType="number"
                 glow
@@ -395,8 +390,8 @@ export default function BabyDetailPage() {
                 unit="bpm"
                 actualKey="heartRate"
                 predictedKey="predictedHeartRate"
-                data={heartRateChartData}
-                chartKey={`heart-rate-${hrData[hrData.length - 1]?.x || 0}`}
+                data={hrData}
+                chartKey={`heart-rate-${hrData.length}-${hrData[hrData.length - 1]?.x || 0}`}
                 xKey="x"
                 xType="number"
               />
@@ -407,32 +402,33 @@ export default function BabyDetailPage() {
                 unit="%"
                 actualKey="spo2"
                 predictedKey="predictedSpo2"
-                data={spo2ChartData}
-                chartKey={`spo2-${spo2Data[spo2Data.length - 1]?.x || 0}`}
+                data={spo2Data}
+                chartKey={`spo2-${spo2Data.length}-${spo2Data[spo2Data.length - 1]?.x || 0}`}
                 xKey="x"
                 xType="number"
               />
               <BPChart
-                data={bloodPressureChartData}
-                chartKey={`bp-${bpData[bpData.length - 1]?.x || 0}`}
+                data={bpData}
+                chartKey={`bp-${bpData.length}-${bpData[bpData.length - 1]?.x || 0}`}
                 xKey="x"
                 xType="number"
               />
             </div>
             <div className="space-y-6">
-              <PredictionPanel prediction={baby.prediction} vitals={baby.vitals} />
+              <PredictionPanel prediction={currentBaby.prediction} vitals={currentBaby.vitals} />
               <section className="rounded-[28px] border border-[#dbe7ed] bg-white p-5 shadow-panel">
                 <h2 className="text-lg font-semibold">Clinical Snapshot</h2>
                 <div className="mt-4 grid gap-3 text-sm text-slate">
                   <div className="rounded-2xl bg-[#f6fafc] p-4">
-                    Current status is <span className="font-semibold capitalize text-ink">{baby.status}</span> based on
-                    saturation, thermal stability, and heart-rate pattern.
+                    Current status is <span className="font-semibold capitalize text-ink">{currentBaby.status}</span>{" "}
+                    based on saturation, thermal stability, and heart-rate pattern.
                   </div>
                   <div className="rounded-2xl bg-[#f6fafc] p-4">
-                    Last update received at <span className="font-semibold text-ink">{baby.lastUpdated}</span>.
+                    Last update received at <span className="font-semibold text-ink">{currentBaby.lastUpdated}</span>.
                   </div>
                   <div className="rounded-2xl bg-[#f6fafc] p-4">
-                    Bed team priority: <span className="font-semibold text-ink">{baby.prediction.riskLevel}</span>.
+                    Bed team priority:{" "}
+                    <span className="font-semibold text-ink">{currentBaby.prediction.riskLevel}</span>.
                   </div>
                 </div>
               </section>

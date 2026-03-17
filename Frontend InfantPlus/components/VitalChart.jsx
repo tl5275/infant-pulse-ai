@@ -86,7 +86,7 @@ function VitalChartComponent({
               strokeLinejoin="round"
               style={glow ? { filter: `drop-shadow(0 0 8px ${color})` } : undefined}
               dot={false}
-              isAnimationActive
+              isAnimationActive={false}
               animationDuration={animationDuration}
               animationEasing="ease-in-out"
             />
@@ -100,7 +100,7 @@ function VitalChartComponent({
               strokeLinecap="round"
               strokeLinejoin="round"
               dot={false}
-              isAnimationActive
+              isAnimationActive={false}
               animationDuration={animationDuration}
               animationEasing="ease-in-out"
             />
